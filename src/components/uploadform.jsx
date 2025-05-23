@@ -5,8 +5,12 @@ const FileUploadForm = ({ onSuccess, onError, loading, setLoading }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState('');
   const fileInputRef = useRef(null);
-  const API_URL = `${import.meta.env.VITE_BACKEND_API_URL}/api/v1/image`;
-  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 5MB
+  
+  // Use environment variable for backend URL
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:8000`;
+  const API_URL = `${BACKEND_URL}/api/v1/video`;
+  
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -20,7 +24,7 @@ const FileUploadForm = ({ onSuccess, onError, loading, setLoading }) => {
 
     // Validate file size
     if(file.size > MAX_FILE_SIZE){
-      onError('File size must be less than 5MB');
+      onError('File size must be less than 10MB');
       return;
     }
 
@@ -33,40 +37,38 @@ const FileUploadForm = ({ onSuccess, onError, loading, setLoading }) => {
     onError(null);
   };
 
-  const readFileAsBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = (error) => reject(error);
-    });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedFile) {
+    if(!selectedFile){
       onError('Please select a file first');
       return;
     }
 
     setLoading(true);
     try {
-      const base64Image = await readFileAsBase64(selectedFile);
+      // Create FormData and append the file
+      const formData = new FormData();
+      formData.append('file', selectedFile);
 
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image }),
+        body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Upload failed');
+        throw new Error(errorData.error || 'Upload failed');
       }
 
       const result = await response.json();
-      onSuccess(result);
-      onError(null);
+      
+      // Check if the result contains landmarks
+      if (result.landmarks && result.landmarks.length > 0) {
+        onSuccess(result);
+        onError(null);
+      } else {
+        onError('No pose detected in the image');
+      }
       
       // Reset form
       setSelectedFile(null);
